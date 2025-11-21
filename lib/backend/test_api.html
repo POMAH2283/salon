@@ -1,0 +1,68 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>AutoSalon API Test</title>
+</head>
+<body>
+<h1>Тест API AutoSalon</h1>
+
+<div>
+    <h3>1. Тест логина</h3>
+    <button onclick="testLogin()">Тест авторизации</button>
+    <div id="loginResult"></div>
+</div>
+
+<div>
+    <h3>2. Тест получения автомобилей</h3>
+    <input type="text" id="token" placeholder="JWT токен" style="width: 300px;">
+    <button onclick="testGetCars()">Получить автомобили</button>
+    <div id="carsResult"></div>
+</div>
+
+<script>
+    async function testLogin() {
+        try {
+            const response = await fetch('http://localhost:3000/api/auth/login', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    email: 'admin@autosalon.ru',
+                    password: '123456'
+                })
+            });
+
+            const data = await response.json();
+            document.getElementById('loginResult').innerHTML =
+                `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+
+            if (data.access_token) {
+                document.getElementById('token').value = data.access_token;
+            }
+        } catch (error) {
+            document.getElementById('loginResult').innerHTML = `Ошибка: ${error}`;
+        }
+    }
+
+    async function testGetCars() {
+        const token = document.getElementById('token').value;
+
+        try {
+            const response = await fetch('http://localhost:3000/api/cars', {
+                method: 'GET',
+                headers: {
+                    'Authorization': `Bearer ${token}`
+                }
+            });
+
+            const data = await response.json();
+            document.getElementById('carsResult').innerHTML =
+                `<pre>${JSON.stringify(data, null, 2)}</pre>`;
+        } catch (error) {
+            document.getElementById('carsResult').innerHTML = `Ошибка: ${error}`;
+        }
+    }
+</script>
+</body>
+</html>
