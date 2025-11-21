@@ -1,60 +1,113 @@
-import 'package:bloc/bloc.dart';
-import 'package:equatable/equatable.dart';
-import '../../data/models/car_model.dart';
-import '../../data/repositories/car_repository_impl.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:salon/features/cars/domain/entities/car_entity.dart';
+import 'package:salon/core/services/api_service.dart';
 
-part 'car_management_event.dart';
-part 'car_management_state.dart';
+// Events
+abstract class CarManagementEvent {}
 
+class LoadCarsEvent extends CarManagementEvent {}
+
+class AddCarEvent extends CarManagementEvent {
+  final Car car;
+  AddCarEvent(this.car);
+}
+
+class UpdateCarEvent extends CarManagementEvent {
+  final Car car;
+  UpdateCarEvent(this.car);
+}
+
+class DeleteCarEvent extends CarManagementEvent {
+  final int carId;
+  DeleteCarEvent(this.carId);
+}
+
+// States
+abstract class CarManagementState {}
+
+class CarsInitial extends CarManagementState {}
+
+class CarsLoading extends CarManagementState {}
+
+class CarsLoaded extends CarManagementState {
+  final List<Car> cars;
+  CarsLoaded(this.cars);
+}
+
+class CarOperationSuccess extends CarManagementState {
+  final String message;
+  CarOperationSuccess(this.message);
+}
+
+class CarOperationError extends CarManagementState {
+  final String message;
+  CarOperationError(this.message);
+}
+
+// Bloc
 class CarManagementBloc extends Bloc<CarManagementEvent, CarManagementState> {
-  final CarRepositoryImpl _carRepository;
-
-  CarManagementBloc()
-      : _carRepository = CarRepositoryImpl(),
-        super(CarManagementInitial()) {
-    on<CreateCarEvent>(_onCreateCar);
+  CarManagementBloc() : super(CarsInitial()) {
+    on<LoadCarsEvent>(_onLoadCars);
+    on<AddCarEvent>(_onAddCar);
     on<UpdateCarEvent>(_onUpdateCar);
     on<DeleteCarEvent>(_onDeleteCar);
-    on<UpdateCarStatusEvent>(_onUpdateCarStatus);
   }
 
-  void _onCreateCar(CreateCarEvent event, Emitter<CarManagementState> emit) async {
-    emit(CarManagementLoading());
+  Future<void> _onLoadCars(LoadCarsEvent event, Emitter<CarManagementState> emit) async {
+    emit(CarsLoading());
     try {
-      await _carRepository.createCar(event.car);
-      emit(CarManagementSuccess('Автомобиль создан успешно'));
+      final response = await ApiService.get('/cars');
+      if (response.statusCode == 200) {
+        final List<dynamic> data = response.data;
+        final cars = data.map((json) => Car.fromJson(json)).toList();
+        emit(CarsLoaded(cars));
+      } else {
+        emit(CarOperationError('Ошибка загрузки автомобилей'));
+      }
     } catch (e) {
-      emit(CarManagementError(e.toString()));
+      emit(CarOperationError('Ошибка: $e'));
     }
   }
 
-  void _onUpdateCar(UpdateCarEvent event, Emitter<CarManagementState> emit) async {
-    emit(CarManagementLoading());
+  Future<void> _onAddCar(AddCarEvent event, Emitter<CarManagementState> emit) async {
     try {
-      await _carRepository.updateCar(event.car);
-      emit(CarManagementSuccess('Автомобиль обновлен успешно'));
+      final response = await ApiService.post('/cars', data: event.car.toJson());
+      if (response.statusCode == 201) {
+        emit(CarOperationSuccess('Автомобиль добавлен'));
+        add(LoadCarsEvent());
+      } else {
+        emit(CarOperationError('Ошибка добавления автомобиля'));
+      }
     } catch (e) {
-      emit(CarManagementError(e.toString()));
+      emit(CarOperationError('Ошибка: $e'));
     }
   }
 
-  void _onDeleteCar(DeleteCarEvent event, Emitter<CarManagementState> emit) async {
-    emit(CarManagementLoading());
+  Future<void> _onUpdateCar(UpdateCarEvent event, Emitter<CarManagementState> emit) async {
     try {
-      await _carRepository.deleteCar(event.carId);
-      emit(CarManagementSuccess('Автомобиль удален успешно'));
+      final response = await ApiService.put('/cars/${event.car.id}', data: event.car.toJson());
+      if (response.statusCode == 200) {
+        emit(CarOperationSuccess('Автомобиль обновлен'));
+        add(LoadCarsEvent());
+      } else {
+        emit(CarOperationError('Ошибка обновления автомобиля'));
+      }
     } catch (e) {
-      emit(CarManagementError(e.toString()));
+      emit(CarOperationError('Ошибка: $e'));
     }
   }
 
-  void _onUpdateCarStatus(UpdateCarStatusEvent event, Emitter<CarManagementState> emit) async {
-    emit(CarManagementLoading());
+  Future<void> _onDeleteCar(DeleteCarEvent event, Emitter<CarManagementState> emit) async {
     try {
-      await _carRepository.updateCarStatus(event.carId, event.status);
-      emit(CarManagementSuccess('Статус обновлен успешно'));
+      final response = await ApiService.delete('/cars/${event.carId}');
+      if (response.statusCode == 200) {
+        emit(CarOperationSuccess('Автомобиль удален'));
+        add(LoadCarsEvent());
+      } else {
+        emit(CarOperationError('Ошибка удаления автомобиля'));
+      }
     } catch (e) {
-      emit(CarManagementError(e.toString()));
+      emit(CarOperationError('Ошибка: $e'));
     }
   }
 }
