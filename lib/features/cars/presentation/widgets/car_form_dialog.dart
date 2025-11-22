@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import '../bloc/car_management_bloc.dart';
-import '../../data/models/car_model.dart';
+import 'package:salon/features/cars/domain/entities/car_entity.dart';
+import 'package:salon/features/cars/presentation/bloc/car_management_bloc.dart';
 
 class CarFormDialog extends StatefulWidget {
-  final CarModel? car;
+  final Car? car;
 
-  const CarFormDialog({super.key, this.car});
+  const CarFormDialog({this.car});
 
   @override
   State<CarFormDialog> createState() => _CarFormDialogState();
@@ -19,27 +19,23 @@ class _CarFormDialogState extends State<CarFormDialog> {
   final _yearController = TextEditingController();
   final _priceController = TextEditingController();
   final _mileageController = TextEditingController();
+  final _bodyTypeController = TextEditingController();
   final _descriptionController = TextEditingController();
 
-  String _bodyType = 'Седан';
   String _status = 'available';
 
   @override
   void initState() {
     super.initState();
-    // Если передан автомобиль для редактирования - заполняем поля
     if (widget.car != null) {
       _brandController.text = widget.car!.brand;
       _modelController.text = widget.car!.model;
       _yearController.text = widget.car!.year.toString();
       _priceController.text = widget.car!.price.toString();
       _mileageController.text = widget.car!.mileage.toString();
-      _descriptionController.text = widget.car!.description;
-      _bodyType = widget.car!.bodyType;
+      _bodyTypeController.text = widget.car!.bodyType;
+      _descriptionController.text = widget.car!.description ?? '';
       _status = widget.car!.status;
-    } else {
-      // Для нового автомобиля устанавливаем пробег по умолчанию
-      _mileageController.text = '0';
     }
   }
 
@@ -50,16 +46,49 @@ class _CarFormDialogState extends State<CarFormDialog> {
     _yearController.dispose();
     _priceController.dispose();
     _mileageController.dispose();
+    _bodyTypeController.dispose();
     _descriptionController.dispose();
     super.dispose();
+  }
+
+  void _submitForm() {
+    if (_formKey.currentState!.validate()) {
+      final car = Car(
+        id: widget.car?.id,
+        brand: _brandController.text,
+        model: _modelController.text,
+        year: int.parse(_yearController.text),
+        price: double.parse(_priceController.text),
+        mileage: int.parse(_mileageController.text),
+        bodyType: _bodyTypeController.text,
+        description: _descriptionController.text.isEmpty ? null : _descriptionController.text,
+        status: _status,
+      );
+
+      if (widget.car == null) {
+        // Добавление нового автомобиля
+        context.read<CarManagementBloc>().add(AddCarEvent(car));
+      } else {
+        // Редактирование существующего
+        context.read<CarManagementBloc>().add(UpdateCarEvent(car));
+      }
+    }
   }
 
   @override
   Widget build(BuildContext context) {
     return BlocListener<CarManagementBloc, CarManagementState>(
       listener: (context, state) {
-        if (state is CarManagementSuccess) {
-          Navigator.of(context).pop(); // Закрываем диалог при успехе
+        if (state is CarOperationSuccess) {
+          ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(state.message))
+          );
+          Navigator.of(context).pop();
+        }
+        if (state is CarOperationError) {
+          ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(content: Text(state.message))
+          );
         }
       },
       child: AlertDialog(
@@ -72,101 +101,95 @@ class _CarFormDialogState extends State<CarFormDialog> {
               children: [
                 TextFormField(
                   controller: _brandController,
-                  decoration: const InputDecoration(labelText: 'Марка *'),
+                  decoration: InputDecoration(labelText: 'Марка *'),
                   validator: (value) {
                     if (value == null || value.isEmpty) {
-                      return 'Введите марку автомобиля';
+                      return 'Введите марку';
                     }
                     return null;
                   },
                 ),
-                const SizedBox(height: 12),
                 TextFormField(
                   controller: _modelController,
-                  decoration: const InputDecoration(labelText: 'Модель *'),
+                  decoration: InputDecoration(labelText: 'Модель *'),
                   validator: (value) {
                     if (value == null || value.isEmpty) {
-                      return 'Введите модель автомобиля';
+                      return 'Введите модель';
                     }
                     return null;
                   },
                 ),
-                const SizedBox(height: 12),
                 TextFormField(
                   controller: _yearController,
-                  decoration: const InputDecoration(labelText: 'Год *'),
+                  decoration: InputDecoration(labelText: 'Год *'),
                   keyboardType: TextInputType.number,
                   validator: (value) {
                     if (value == null || value.isEmpty) {
-                      return 'Введите год выпуска';
+                      return 'Введите год';
                     }
-                    final year = int.tryParse(value);
-                    if (year == null || year < 1900 || year > DateTime.now().year + 1) {
+                    if (int.tryParse(value) == null) {
                       return 'Введите корректный год';
                     }
                     return null;
                   },
                 ),
-                const SizedBox(height: 12),
                 TextFormField(
                   controller: _priceController,
-                  decoration: const InputDecoration(labelText: 'Цена *'),
+                  decoration: InputDecoration(labelText: 'Цена *'),
                   keyboardType: TextInputType.number,
                   validator: (value) {
                     if (value == null || value.isEmpty) {
                       return 'Введите цену';
                     }
-                    final price = double.tryParse(value);
-                    if (price == null || price <= 0) {
+                    if (double.tryParse(value) == null) {
                       return 'Введите корректную цену';
                     }
                     return null;
                   },
                 ),
-                const SizedBox(height: 12),
                 TextFormField(
                   controller: _mileageController,
-                  decoration: const InputDecoration(labelText: 'Пробег (км)'),
+                  decoration: InputDecoration(labelText: 'Пробег *'),
                   keyboardType: TextInputType.number,
-                ),
-                const SizedBox(height: 12),
-                DropdownButtonFormField<String>(
-                  value: _bodyType,
-                  items: const [
-                    DropdownMenuItem(value: 'Седан', child: Text('Седан')),
-                    DropdownMenuItem(value: 'Внедорожник', child: Text('Внедорожник')),
-                    DropdownMenuItem(value: 'Хэтчбек', child: Text('Хэтчбек')),
-                    DropdownMenuItem(value: 'Универсал', child: Text('Универсал')),
-                    DropdownMenuItem(value: 'Купе', child: Text('Купе')),
-                    DropdownMenuItem(value: 'Кабриолет', child: Text('Кабриолет')),
-                  ],
-                  onChanged: (value) {
-                    setState(() {
-                      _bodyType = value!;
-                    });
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Введите пробег';
+                    }
+                    if (int.tryParse(value) == null) {
+                      return 'Введите корректный пробег';
+                    }
+                    return null;
                   },
-                  decoration: const InputDecoration(labelText: 'Тип кузова'),
                 ),
-                const SizedBox(height: 12),
+                TextFormField(
+                  controller: _bodyTypeController,
+                  decoration: InputDecoration(labelText: 'Тип кузова *'),
+                  validator: (value) {
+                    if (value == null || value.isEmpty) {
+                      return 'Введите тип кузова';
+                    }
+                    return null;
+                  },
+                ),
+                TextFormField(
+                  controller: _descriptionController,
+                  decoration: InputDecoration(labelText: 'Описание'),
+                  maxLines: 3,
+                ),
+                SizedBox(height: 16),
                 DropdownButtonFormField<String>(
                   value: _status,
-                  items: const [
+                  decoration: InputDecoration(labelText: 'Статус'),
+                  items: [
                     DropdownMenuItem(value: 'available', child: Text('В наличии')),
-                    DropdownMenuItem(value: 'reserved', child: Text('Забронировано')),
                     DropdownMenuItem(value: 'sold', child: Text('Продано')),
+                    DropdownMenuItem(value: 'reserved', child: Text('Забронировано')),
                   ],
                   onChanged: (value) {
                     setState(() {
                       _status = value!;
                     });
                   },
-                  decoration: const InputDecoration(labelText: 'Статус'),
-                ),
-                const SizedBox(height: 12),
-                TextFormField(
-                  controller: _descriptionController,
-                  decoration: const InputDecoration(labelText: 'Описание'),
-                  maxLines: 3,
                 ),
               ],
             ),
@@ -175,37 +198,14 @@ class _CarFormDialogState extends State<CarFormDialog> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(),
-            child: const Text('Отмена'),
+            child: Text('Отмена'),
           ),
           ElevatedButton(
-            onPressed: () => _submitForm(context),
-            child: const Text('Сохранить'),
+            onPressed: _submitForm,
+            child: Text(widget.car == null ? 'Добавить' : 'Сохранить'),
           ),
         ],
       ),
     );
-  }
-
-  void _submitForm(BuildContext context) {
-    if (_formKey.currentState!.validate()) {
-      final car = CarModel(
-        id: widget.car?.id ?? 0,
-        brand: _brandController.text,
-        model: _modelController.text,
-        year: int.parse(_yearController.text),
-        price: double.parse(_priceController.text),
-        mileage: int.parse(_mileageController.text.isEmpty ? '0' : _mileageController.text),
-        bodyType: _bodyType,
-        description: _descriptionController.text,
-        status: _status,
-        createdAt: widget.car?.createdAt ?? DateTime.now().toIso8601String(),
-      );
-
-      if (widget.car == null) {
-        context.read<CarManagementBloc>().add(CreateCarEvent(car));
-      } else {
-        context.read<CarManagementBloc>().add(UpdateCarEvent(car));
-      }
-    }
   }
 }

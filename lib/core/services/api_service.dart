@@ -7,7 +7,7 @@ class ApiService {
   final FlutterSecureStorage _storage = const FlutterSecureStorage();
 
   // Для Android эмулятора:
-  static const String baseUrl = 'https://autosalon-backend.onrender.com';
+  static const String baseUrl = 'https://autosalon1.onrender.com';
   // Для браузера: static const String baseUrl = 'http://localhost:3000';
 
   // Конструктор без параметров
@@ -51,6 +51,52 @@ class ApiService {
 
     handler.next(error);
   }
+
+  static Future<Response> get(String endpoint) async {
+    try {
+      return await _dio.get(endpoint);
+    } catch (e) {
+      throw Exception('GET error: $e');
+    }
+  }
+
+  static Future<Response> post(String endpoint, {required dynamic data}) async {
+    try {
+      return await _dio.post(endpoint, data: data);
+    } catch (e) {
+      throw Exception('POST error: $e');
+    }
+  }
+
+  static Future<Response> put(String endpoint, {required dynamic data}) async {
+    try {
+      return await _dio.put(endpoint, data: data);
+    } catch (e) {
+      throw Exception('PUT error: $e');
+    }
+  }
+
+  static Future<Response> delete(String endpoint) async {
+    try {
+      return await _dio.delete(endpoint);
+    } catch (e) {
+      throw Exception('DELETE error: $e');
+    }
+  }
+
+  static void init() {
+    _dio.interceptors.add(InterceptorsWrapper(
+      onRequest: (options, handler) {
+        print('🚀 Request: ${options.method} ${options.path}');
+        return handler.next(options);
+      },
+      onError: (DioException error, handler) {
+        print('❌ API Error: ${error.message}');
+        return handler.next(error);
+      },
+    ));
+  }
+}
 
   Future<Response> get(String path, {Map<String, dynamic>? params}) async {
     return await _dio.get(path, queryParameters: params);
