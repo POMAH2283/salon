@@ -47,6 +47,13 @@ CREATE TABLE clients (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Таблица марок автомобилей
+CREATE TABLE brands (
+    id SERIAL PRIMARY KEY,
+    name VARCHAR(100) UNIQUE NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
 -- Таблица сделок
 CREATE TABLE deals (
     id SERIAL PRIMARY KEY,
@@ -66,8 +73,27 @@ CREATE INDEX idx_cars_brand ON cars(brand);
 CREATE INDEX idx_deals_car_id ON deals(car_id);
 CREATE INDEX idx_deals_client_id ON deals(client_id);
 CREATE INDEX idx_deals_manager_id ON deals(manager_id);
+CREATE INDEX idx_brands_name ON brands(name);
 
 -- Вставка тестовых данных
+
+-- Марки автомобилей
+INSERT INTO brands (name) VALUES 
+('BMW'),
+('Mercedes-Benz'),
+('Audi'),
+('Toyota'),
+('Honda'),
+('Nissan'),
+('Hyundai'),
+('Kia'),
+('Volkswagen'),
+('Ford'),
+('Chevrolet'),
+('Mazda'),
+('Lexus'),
+('Porsche'),
+('Volvo');
 
 -- Сотрудники
 INSERT INTO users (name, email, password_hash, role) VALUES 

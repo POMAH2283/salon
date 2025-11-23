@@ -6,19 +6,24 @@ import '../models/login_request.dart';
 import '../models/user_model.dart';
 
 class AuthRepositoryImpl {
-  final ApiService _apiService;
   final FlutterSecureStorage _storage;
+  static const String _currentUserKey = 'current_user_data';
 
   // Конструктор без параметров
   AuthRepositoryImpl()
-      : _apiService = ApiService(),
-        _storage = const FlutterSecureStorage();
+      : _storage = const FlutterSecureStorage();
 
-  // остальные методы без изменений...
+  // Login method - works only with backend database
   Future<UserModel> login(String email, String password) async {
     try {
+      print('🔄 Starting login for: $email');
+      print('📡 Making API call to: /api/auth/login');
+
+      // Login with backend database
       final request = LoginRequest(email: email, password: password);
-      final response = await _apiService.post('/api/auth/login', data: request.toJson());
+      final response = await ApiService.instance.post('/api/auth/login', data: request.toJson());
+
+      print('📊 Response status: ${response.statusCode}');
 
       if (response.statusCode == 200) {
         final data = response.data;
@@ -29,39 +34,87 @@ class AuthRepositoryImpl {
 
         // Сохраняем данные пользователя
         final user = UserModel.fromJson(data['user']);
-        await _storage.write(key: 'user_data', value: json.encode(user.toJson()));
+        await _storage.write(key: _currentUserKey, value: json.encode(user.toJson()));
 
-        // Логируем сохранение токена
-        final savedToken = await _storage.read(key: 'auth_token');
-        print('✅ Token saved: ${savedToken?.substring(0, 20)}...');
-
-        print('✅ Login successful: ${user.email}');
+        print('✅ Backend login successful: ${user.email}');
         return user;
       } else {
         throw Exception('Ошибка авторизации: ${response.statusCode}');
       }
     } catch (e) {
-      print('❌ Login error: $e');
-      throw Exception('Ошибка сети: $e');
+      print('❌ Backend login failed: $e');
+      throw Exception('Ошибка авторизации: $e');
     }
   }
 
+  // Registration method - saves to server database
+  Future<UserModel> register(String name, String email, String password) async {
+    try {
+      print('🔄 Starting registration for: $email');
+      print('📡 Making API call to: /api/auth/register');
+
+      // Call backend API to register user in PostgreSQL database
+      final response = await ApiService.instance.post('/api/auth/register', data: {
+        'name': name,
+        'email': email,
+        'password': password,
+      });
+
+      print('📊 Response status: ${response.statusCode}');
+      print('📊 Response data: ${response.data}');
+
+      if (response.statusCode == 201) {
+        final data = response.data;
+
+        // Save tokens to local storage
+        await _storage.write(key: 'auth_token', value: data['access_token']);
+        await _storage.write(key: 'refresh_token', value: data['refresh_token']);
+
+        // Create UserModel from response data
+        final user = UserModel.fromJson(data['user']);
+        await _storage.write(key: _currentUserKey, value: json.encode(user.toJson()));
+
+        print('✅ Server registration successful: ${user.email}');
+        print('✅ User saved to PostgreSQL database');
+        return user;
+      } else {
+        throw Exception('Registration failed: ${response.statusCode}');
+      }
+      
+    } catch (e) {
+      print('❌ Registration error: $e');
+      print('❌ Error type: ${e.runtimeType}');
+      
+      // Parse error message from backend
+      if (e.toString().contains('409') || e.toString().contains('already exists')) {
+        throw Exception('Пользователь с таким email уже существует');
+      }
+      
+      throw Exception('Ошибка регистрации: $e');
+    }
+  }
+
+  // Logout method
   Future<void> logout() async {
     try {
-      await _apiService.post('/api/auth/logout');
+      // Backend logout
+      await ApiService.instance.post('/api/auth/logout', data: {});
+      print('✅ Backend logout successful');
     } catch (e) {
-      print('Logout error: $e');
+      print('Backend logout error: $e (ignoring)');
     } finally {
+      // Clear local storage (tokens and current user only)
       await _storage.delete(key: 'auth_token');
       await _storage.delete(key: 'refresh_token');
-      await _storage.delete(key: 'user_data');
-      print('✅ Logout successful');
+      await _storage.delete(key: _currentUserKey);
+      print('✅ Logout successful - tokens cleared');
     }
   }
 
+  // Get current user
   Future<UserModel?> getCurrentUser() async {
     try {
-      final userData = await _storage.read(key: 'user_data');
+      final userData = await _storage.read(key: _currentUserKey);
       if (userData != null) {
         return UserModel.fromJson(json.decode(userData));
       }
@@ -71,8 +124,10 @@ class AuthRepositoryImpl {
     }
   }
 
+  // Check if user is logged in
   Future<bool> isLoggedIn() async {
     final token = await _storage.read(key: 'auth_token');
-    return token != null;
+    return token != null && token.isNotEmpty;
   }
+
 }

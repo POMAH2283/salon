@@ -17,6 +17,7 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
     print('🔄 AuthBloc created with initial state: $state');
 
     on<LoginEvent>(_onLogin);
+    on<RegisterEvent>(_onRegister);
     on<LogoutEvent>(_onLogout);
     on<CheckAuthEvent>(_onCheckAuth);
   }
@@ -30,6 +31,23 @@ class AuthBloc extends Bloc<AuthEvent, AuthState> {
       emit(AuthAuthenticated(user: user));
     } catch (e) {
       print('❌ AuthBloc: Login error, emitting AuthError: $e');
+      emit(AuthError(e.toString()));
+    }
+  }
+
+  void _onRegister(RegisterEvent event, Emitter<AuthState> emit) async {
+    print('🔄 AuthBloc: Processing RegisterEvent for ${event.email}');
+    emit(AuthLoading());
+    try {
+      final user = await _authRepository.register(
+        event.name,
+        event.email,
+        event.password,
+      );
+      print('✅ AuthBloc: Registration successful, emitting AuthAuthenticated');
+      emit(AuthAuthenticated(user: user));
+    } catch (e) {
+      print('❌ AuthBloc: Registration error, emitting AuthError: $e');
       emit(AuthError(e.toString()));
     }
   }

@@ -1,0 +1,753 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:salon/features/auth/presentation/bloc/auth_bloc.dart';
+import 'package:salon/features/auth/data/models/user_model.dart';
+import '../../domain/entities/car_entity.dart';
+import '../bloc/car.dart';
+import '../widgets/car_card.dart';
+import '../widgets/car_form_dialog.dart';
+import '../widgets/car_filters_dialog.dart';
+import '../widgets/car_detail_modal.dart';
+import 'car_photo_upload_screen.dart';
+import '../../data/models/car_model.dart';
+
+class CarManagementScreen extends StatelessWidget {
+  const CarManagementScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Управление автомобилями'),
+      ),
+      body: BlocBuilder<AuthBloc, AuthState>(
+        builder: (context, authState) {
+          if (authState is AuthAuthenticated) {
+            return _CarManagementContent(user: authState.user);
+          } else {
+            return const Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Icon(Icons.error_outline, size: 64, color: Colors.red),
+                  SizedBox(height: 16),
+                  Text(
+                    'Ошибка авторизации',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                  ),
+                  SizedBox(height: 8),
+                  Text('Пожалуйста, войдите в систему'),
+                ],
+              ),
+            );
+          }
+        },
+      ),
+    );
+  }
+}
+
+class _CarManagementContent extends StatelessWidget {
+  final UserModel user;
+
+  const _CarManagementContent({required this.user});
+
+  @override
+  Widget build(BuildContext context) {
+    final canManage = user.role == 'admin' || user.role == 'manager';
+    final isAdmin = user.role == 'admin';
+
+    return BlocProvider<CarManagementBloc>(
+      create: (context) => CarManagementBloc()..add(LoadCarsEvent()),
+      child: _CarManagementScreenBody(
+        user: user,
+        canManage: canManage,
+        isAdmin: isAdmin,
+      ),
+    );
+  }
+}
+
+class _CarManagementScreenBody extends StatefulWidget {
+  final UserModel user;
+  final bool canManage;
+  final bool isAdmin;
+
+  const _CarManagementScreenBody({
+    required this.user,
+    required this.canManage,
+    required this.isAdmin,
+  });
+
+  @override
+  State<_CarManagementScreenBody> createState() => _CarManagementScreenBodyState();
+}
+
+class _CarManagementScreenBodyState extends State<_CarManagementScreenBody> {
+  // Комплексные фильтры
+  Map<String, dynamic> _filters = {};
+  
+  // Сортировка
+  String _sortBy = 'created_at';
+  bool _sortAscending = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        // Заголовок с информацией о пользователе
+        Card(
+          margin: const EdgeInsets.all(16),
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              children: [
+                CircleAvatar(
+                  backgroundColor: _getRoleColor(widget.user.role),
+                  child: const Icon(
+                    Icons.person,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(width: 16),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Управление автомобилями',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: _getRoleColor(widget.user.role),
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        'Пользователь: ${widget.user.name} (${widget.user.role})',
+                        style: const TextStyle(fontSize: 14),
+                      ),
+                    ],
+                  ),
+                ),
+                if (widget.canManage)
+                  IconButton(
+                    icon: const Icon(Icons.add, color: Colors.green),
+                    onPressed: () => _showAddCarDialog(context),
+                  ),
+              ],
+            ),
+          ),
+        ),
+
+        // Панель фильтров и сортировки
+        Card(
+          margin: const EdgeInsets.symmetric(horizontal: 16),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    const Icon(Icons.filter_list, size: 20),
+                    const SizedBox(width: 8),
+                    const Text(
+                      'Фильтры и сортировка',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    const Spacer(),
+                    ElevatedButton.icon(
+                      icon: const Icon(Icons.tune, size: 18),
+                      label: const Text('Все фильтры'),
+                      onPressed: _showAdvancedFilters,
+                    ),
+                    const SizedBox(width: 8),
+                    TextButton.icon(
+                      icon: const Icon(Icons.clear, size: 18),
+                      label: const Text('Сбросить'),
+                      onPressed: _resetFilters,
+                    ),
+                  ],
+                ),
+                const Divider(),
+                
+                // Активные фильтры
+                if (_filters.isNotEmpty) ...[
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 4,
+                    children: _filters.entries.map((entry) {
+                      return Chip(
+                        label: Text('${entry.key}: ${entry.value}'),
+                        onDeleted: () {
+                          setState(() {
+                            _filters.remove(entry.key);
+                          });
+                        },
+                        deleteIconColor: Colors.red,
+                      );
+                    }).toList(),
+                  ),
+                  const SizedBox(height: 8),
+                ],
+                
+                // Сортировка
+                Row(
+                  children: [
+                    Expanded(
+                      child: DropdownButtonFormField<String>(
+                        value: _sortBy,
+                        decoration: const InputDecoration(
+                          labelText: 'Сортировать по',
+                          border: OutlineInputBorder(),
+                          contentPadding: EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        ),
+                        items: const [
+                          DropdownMenuItem(value: 'created_at', child: Text('Дате добавления')),
+                          DropdownMenuItem(value: 'price', child: Text('Цене')),
+                          DropdownMenuItem(value: 'brand', child: Text('Марке')),
+                          DropdownMenuItem(value: 'year', child: Text('Году')),
+                          DropdownMenuItem(value: 'mileage', child: Text('Пробегу')),
+                          DropdownMenuItem(value: 'engine_volume', child: Text('Объему двигателя')),
+                          DropdownMenuItem(value: 'power', child: Text('Мощности')),
+                        ],
+                        onChanged: (value) {
+                          if (value != null) {
+                            setState(() {
+                              _sortBy = value;
+                            });
+                          }
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    IconButton(
+                      icon: Icon(
+                        _sortAscending ? Icons.arrow_upward : Icons.arrow_downward,
+                      ),
+                      onPressed: () {
+                        setState(() {
+                          _sortAscending = !_sortAscending;
+                        });
+                      },
+                      tooltip: _sortAscending ? 'По возрастанию' : 'По убыванию',
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
+
+        const SizedBox(height: 8),
+
+        // Тело с списком автомобилей
+        Expanded(
+          child: _CarListBody(
+            user: widget.user,
+            canManage: widget.canManage,
+            isAdmin: widget.isAdmin,
+            filters: _filters,
+            sortBy: _sortBy,
+            sortAscending: _sortAscending,
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _resetFilters() {
+    setState(() {
+      _filters.clear();
+      _sortBy = 'created_at';
+      _sortAscending = false;
+    });
+  }
+
+  void _showAdvancedFilters() async {
+    final result = await showDialog<Map<String, dynamic>>(
+      context: context,
+      builder: (context) => CarFiltersDialog(
+        initialFilters: _filters,
+      ),
+    );
+    
+    if (result != null) {
+      setState(() {
+        _filters = result;
+      });
+    }
+  }
+
+  Color _getRoleColor(String role) {
+    switch (role) {
+      case 'admin':
+        return Colors.red;
+      case 'manager':
+        return Colors.blue;
+      case 'viewer':
+        return Colors.green;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  void _showAddCarDialog(BuildContext context) {
+    final carBloc = context.read<CarManagementBloc>();
+    showDialog(
+      context: context,
+      builder: (context) => BlocProvider.value(
+        value: carBloc,
+        child: const CarFormDialog(),
+      ),
+    );
+  }
+}
+
+class _CarListBody extends StatelessWidget {
+  final UserModel user;
+  final bool canManage;
+  final bool isAdmin;
+  final Map<String, dynamic> filters;
+  final String sortBy;
+  final bool sortAscending;
+
+  const _CarListBody({
+    required this.user,
+    required this.canManage,
+    required this.isAdmin,
+    required this.filters,
+    required this.sortBy,
+    required this.sortAscending,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return BlocListener<CarManagementBloc, CarManagementState>(
+      listener: (context, state) {
+        if (state is CarManagementSuccess) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(state.message),
+              backgroundColor: Colors.green,
+            ),
+          );
+          context.read<CarManagementBloc>().add(LoadCarsEvent());
+        }
+        if (state is CarManagementError) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(state.message),
+              backgroundColor: Colors.red,
+            ),
+          );
+        }
+      },
+      child: BlocBuilder<CarManagementBloc, CarManagementState>(
+        builder: (context, state) {
+          if (state is CarsLoading) {
+            return const Center(child: CircularProgressIndicator());
+          } else if (state is CarManagementError) {
+            return Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.error_outline, size: 64, color: Colors.red),
+                  const SizedBox(height: 16),
+                  Text('Ошибка загрузки: ${state.message}'),
+                ],
+              ),
+            );
+          } else if (state is CarsLoaded) {
+            // Применяем фильтры
+            var filteredCars = state.cars.where((car) {
+              // Фильтр по статусу
+              if (filters.containsKey('status') && car.status != filters['status']) {
+                return false;
+              }
+              
+              // Фильтр по марке
+              if (filters.containsKey('brand') && car.brand != filters['brand']) {
+                return false;
+              }
+              
+              // Фильтр по типу кузова
+              if (filters.containsKey('body_type') && car.bodyType != filters['body_type']) {
+                return false;
+              }
+              
+              // Фильтр по типу топлива
+              if (filters.containsKey('fuel_type') && car.fuelType != filters['fuel_type']) {
+                return false;
+              }
+              
+              // Фильтр по трансмиссии
+              if (filters.containsKey('transmission_type') && car.transmissionType != filters['transmission_type']) {
+                return false;
+              }
+              
+              // Фильтр по приводу
+              if (filters.containsKey('drive_type') && car.driveType != filters['drive_type']) {
+                return false;
+              }
+              
+              // Диапазон года
+              if (filters.containsKey('year_min') && car.year < filters['year_min']) {
+                return false;
+              }
+              if (filters.containsKey('year_max') && car.year > filters['year_max']) {
+                return false;
+              }
+              
+              // Диапазон цены
+              if (filters.containsKey('price_min') && car.price < filters['price_min']) {
+                return false;
+              }
+              if (filters.containsKey('price_max') && car.price > filters['price_max']) {
+                return false;
+              }
+              
+              // Диапазон пробега
+              if (filters.containsKey('mileage_min') && car.mileage < filters['mileage_min']) {
+                return false;
+              }
+              if (filters.containsKey('mileage_max') && car.mileage > filters['mileage_max']) {
+                return false;
+              }
+              
+              // Диапазон объема двигателя
+              if (filters.containsKey('engine_volume_min')) {
+                final carVol = car.engineVolume ?? 0.0;
+                if (carVol < filters['engine_volume_min']) return false;
+              }
+              if (filters.containsKey('engine_volume_max')) {
+                final carVol = car.engineVolume ?? 0.0;
+                if (carVol > filters['engine_volume_max']) return false;
+              }
+              
+              // Диапазон мощности
+              if (filters.containsKey('power_min')) {
+                final carPower = car.power ?? 0;
+                if (carPower < filters['power_min']) return false;
+              }
+              if (filters.containsKey('power_max')) {
+                final carPower = car.power ?? 0;
+                if (carPower > filters['power_max']) return false;
+              }
+              
+              return true;
+            }).toList();
+
+            // Применяем сортировку
+            filteredCars.sort((a, b) {
+              int comparison = 0;
+              
+              switch (sortBy) {
+                case 'price':
+                  comparison = a.price.compareTo(b.price);
+                  break;
+                case 'brand':
+                  comparison = a.brand.compareTo(b.brand);
+                  break;
+                case 'year':
+                  comparison = a.year.compareTo(b.year);
+                  break;
+                case 'mileage':
+                  comparison = a.mileage.compareTo(b.mileage);
+                  break;
+                case 'engine_volume':
+                  final aVol = a.engineVolume ?? 0.0;
+                  final bVol = b.engineVolume ?? 0.0;
+                  comparison = aVol.compareTo(bVol);
+                  break;
+                case 'power':
+                  final aPower = a.power ?? 0;
+                  final bPower = b.power ?? 0;
+                  comparison = aPower.compareTo(bPower);
+                  break;
+                case 'created_at':
+                default:
+                  comparison = a.createdAt.compareTo(b.createdAt);
+                  break;
+              }
+              
+              return sortAscending ? comparison : -comparison;
+            });
+
+            if (filteredCars.isEmpty) {
+              return const Center(
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(Icons.directions_car, size: 64, color: Colors.grey),
+                    SizedBox(height: 16),
+                    Text('Автомобили не найдены'),
+                    SizedBox(height: 8),
+                    Text('Попробуйте изменить фильтры', style: TextStyle(color: Colors.grey)),
+                  ],
+                ),
+              );
+            }
+
+            return ListView.builder(
+              padding: const EdgeInsets.all(16),
+              itemCount: filteredCars.length,
+              itemBuilder: (context, index) {
+                final car = filteredCars[index];
+                return GestureDetector(
+                  onTap: () => _showCarDetailModal(context, car),
+                  child: _CarManagementCard(
+                    car: car,
+                    user: user,
+                    canManage: canManage,
+                    isAdmin: isAdmin,
+                  ),
+                );
+              },
+            );
+          }
+          
+          return const Center(child: Text('Нет данных'));
+        },
+      ),
+    );
+  }
+
+  void _showCarDetailModal(BuildContext context, CarEntity car) {
+    showDialog(
+      context: context,
+      builder: (context) => CarDetailModal(car: car),
+    );
+  }
+}
+
+class _CarManagementCard extends StatelessWidget {
+  final CarEntity car;
+  final UserModel user;
+  final bool canManage;
+  final bool isAdmin;
+
+  const _CarManagementCard({
+    required this.car,
+    required this.user,
+    required this.canManage,
+    required this.isAdmin,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '${car.brand} ${car.model}',
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '${car.year} • ${car.mileage.toString()} км',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.grey[600],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      '${car.price.toStringAsFixed(0)} ₽',
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.green,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: _getStatusColor(car.status),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        _getStatusText(car.status),
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            
+            // Характеристики
+            if (car.engineVolume != null || car.power != null || car.fuelType != null) ...[
+              Wrap(
+                spacing: 12,
+                runSpacing: 4,
+                children: [
+                  if (car.engineVolume != null)
+                    _buildCharacteristicChip('${car.engineVolume} л'),
+                  if (car.power != null)
+                    _buildCharacteristicChip('${car.power} л.с.'),
+                  if (car.fuelType != null)
+                    _buildCharacteristicChip(car.fuelType!),
+                  if (car.transmissionType != null)
+                    _buildCharacteristicChip(car.transmissionType!),
+                  if (car.driveType != null)
+                    _buildCharacteristicChip(car.driveType!),
+                ],
+              ),
+              const SizedBox(height: 8),
+            ],
+
+            if (car.description?.isNotEmpty == true)
+              Text(
+                car.description!,
+                style: TextStyle(
+                  fontSize: 14,
+                  color: Colors.grey[700],
+                ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+              ),
+
+            const SizedBox(height: 12),
+            
+            Row(
+              mainAxisAlignment: MainAxisAlignment.end,
+              children: [
+                // Кнопка фотографий
+                if (canManage) ...[
+                  IconButton(
+                    onPressed: () => _showPhotosScreen(context),
+                    icon: const Icon(Icons.photo_library, color: Colors.purple),
+                    tooltip: 'Фотографии',
+                  ),
+                  IconButton(
+                    onPressed: () => _showEditDialog(context),
+                    icon: const Icon(Icons.edit, color: Colors.blue),
+                    tooltip: 'Редактировать',
+                  ),
+                  if (isAdmin)
+                    IconButton(
+                      onPressed: () => _showDeleteConfirmation(context),
+                      icon: const Icon(Icons.delete, color: Colors.red),
+                      tooltip: 'Удалить',
+                    ),
+                ],
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCharacteristicChip(String value) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+      decoration: BoxDecoration(
+        color: Colors.grey[200],
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Text(
+        value,
+        style: const TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w500,
+        ),
+      ),
+    );
+  }
+
+  Color _getStatusColor(String status) {
+    switch (status) {
+      case 'available':
+        return Colors.green;
+      case 'sold':
+        return Colors.blue;
+      case 'reserved':
+        return Colors.orange;
+      default:
+        return Colors.grey;
+    }
+  }
+
+  String _getStatusText(String status) {
+    switch (status) {
+      case 'available':
+        return 'В наличии';
+      case 'sold':
+        return 'Продано';
+      case 'reserved':
+        return 'Забронировано';
+      default:
+        return 'Неизвестно';
+    }
+  }
+
+  void _showEditDialog(BuildContext context) {
+    final carBloc = context.read<CarManagementBloc>();
+    showDialog(
+      context: context,
+      builder: (context) => BlocProvider.value(
+        value: carBloc,
+        child: CarFormDialog(car: car),
+      ),
+    );
+  }
+
+  void _showPhotosScreen(BuildContext context) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => CarPhotoUploadScreen(carId: car.id),
+      ),
+    );
+  }
+
+  void _showDeleteConfirmation(BuildContext context) {
+    final carBloc = context.read<CarManagementBloc>();
+    showDialog(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('Подтверждение удаления'),
+        content: Text('Вы уверены, что хотите удалить автомобиль "${car.brand} ${car.model}"?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(),
+            child: const Text('Отмена'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.of(dialogContext).pop();
+              carBloc.add(DeleteCarEvent(car.id));
+            },
+            child: const Text('Удалить', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+  }
+}

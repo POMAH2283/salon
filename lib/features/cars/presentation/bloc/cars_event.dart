@@ -10,23 +10,23 @@ abstract class CarsEvent extends Equatable {
 class LoadCarsEvent extends CarsEvent {}
 
 class FilterCarsEvent extends CarsEvent {
-  final String? brand;
-  final String? status;
-  final double? minPrice;
-  final double? maxPrice;
+  final Map<String, dynamic>? filters;
 
   const FilterCarsEvent({
-    this.brand,
-    this.status,
-    this.minPrice,
-    this.maxPrice,
+    this.filters,
   });
 
   @override
-  List<Object> get props => [
-    brand ?? '',
-    status ?? '',
-    minPrice ?? 0,
-    maxPrice ?? 0
-  ];
+  List<Object> get props => [filters ?? {}];
 }
+
+class LoadFilterOptionsEvent extends CarsEvent {
+  final String type;
+
+  const LoadFilterOptionsEvent(this.type);
+
+  @override
+  List<Object> get props => [type];
+}
+
+class LoadAllFilterOptionsEvent extends CarsEvent {}

@@ -28,3 +28,25 @@ class CarsError extends CarsState {
   @override
   List<Object> get props => [message];
 }
+
+class FilterOptionsLoading extends CarsState {}
+
+class FilterOptionsLoaded extends CarsState {
+  final Map<String, dynamic> filterOptions;
+
+  const FilterOptionsLoaded({
+    required this.filterOptions,
+  });
+
+  @override
+  List<Object> get props => [filterOptions];
+}
+
+class FilterOptionsError extends CarsState {
+  final String message;
+
+  const FilterOptionsError(this.message);
+
+  @override
+  List<Object> get props => [message];
+}

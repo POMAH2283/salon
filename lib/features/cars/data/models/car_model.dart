@@ -9,6 +9,13 @@ class CarModel {
   final String description;
   final String status;
   final String createdAt;
+  
+  // Новые характеристики
+  final double? engineVolume;
+  final String? fuelType;
+  final int? power;
+  final String? transmissionType;
+  final String? driveType;
 
   CarModel({
     required this.id,
@@ -21,6 +28,11 @@ class CarModel {
     required this.description,
     required this.status,
     required this.createdAt,
+    this.engineVolume,
+    this.fuelType,
+    this.power,
+    this.transmissionType,
+    this.driveType,
   });
 
   factory CarModel.fromJson(Map<String, dynamic> json) {
@@ -35,6 +47,11 @@ class CarModel {
       description: json['description'] as String,
       status: json['status'] as String,
       createdAt: json['created_at'] as String,
+      engineVolume: json['engine_volume'] != null ? _parseEngineVolume(json['engine_volume']) : null,
+      fuelType: json['fuel_type'] as String?,
+      power: json['power'] as int?,
+      transmissionType: json['transmission_type'] as String?,
+      driveType: json['drive_type'] as String?,
     );
   }
 
@@ -43,6 +60,16 @@ class CarModel {
       return price.toDouble();
     } else if (price is String) {
       return double.tryParse(price) ?? 0.0;
+    } else {
+      return 0.0;
+    }
+  }
+
+  static double _parseEngineVolume(dynamic volume) {
+    if (volume is num) {
+      return volume.toDouble();
+    } else if (volume is String) {
+      return double.tryParse(volume) ?? 0.0;
     } else {
       return 0.0;
     }
@@ -60,6 +87,11 @@ class CarModel {
       'description': description,
       'status': status,
       'created_at': createdAt,
+      'engine_volume': engineVolume,
+      'fuel_type': fuelType,
+      'power': power,
+      'transmission_type': transmissionType,
+      'drive_type': driveType,
     };
   }
 }

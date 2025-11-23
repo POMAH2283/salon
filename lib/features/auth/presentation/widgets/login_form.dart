@@ -3,8 +3,8 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import '../../../home/presentation/screens/home_screen.dart';
 import '../bloc/auth_bloc.dart';
-// Добавляем этот импорт
-import '../../data/models/user_model.dart'; // Добавляем этот импорт
+import '../../data/models/user_model.dart';
+import '../../data/repositories/auth_repository_impl.dart';
 
 class LoginForm extends StatefulWidget {
   const LoginForm({super.key});
@@ -16,7 +16,24 @@ class LoginForm extends StatefulWidget {
 class _LoginFormState extends State<LoginForm> {
   final _emailController = TextEditingController();
   final _passwordController = TextEditingController();
+  final _nameController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
+  bool _isLogin = true;
+
+  @override
+  void initState() {
+    super.initState();
+  }
+
+
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    _nameController.dispose();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -32,7 +49,7 @@ class _LoginFormState extends State<LoginForm> {
         }
         if (state is AuthAuthenticated) {
           // Переходим на главный экран
-          _showSuccessAndNavigate(context, state.user); // Передаем UserModel
+          _showSuccessAndNavigate(context, state.user);
         }
       },
       builder: (context, state) {
@@ -69,6 +86,56 @@ class _LoginFormState extends State<LoginForm> {
                       ),
                     ),
                     const SizedBox(height: 40),
+
+                    // Toggle between login and registration
+                    ToggleButtons(
+                      isSelected: [_isLogin, !_isLogin],
+                      onPressed: (index) {
+                        setState(() {
+                          _isLogin = index == 0;
+                        });
+                      },
+                      borderRadius: const BorderRadius.all(Radius.circular(8)),
+                      selectedColor: Colors.white,
+                      fillColor: Colors.blue[700],
+                      color: Colors.blue[700],
+                      constraints: const BoxConstraints(
+                        minHeight: 40,
+                        minWidth: 120,
+                      ),
+                      children: const [
+                        Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 16),
+                          child: Text('Вход'),
+                        ),
+                        Padding(
+                          padding: EdgeInsets.symmetric(horizontal: 16),
+                          child: Text('Регистрация'),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 24),
+
+                    // Поле имени (только для регистрации)
+                    if (!_isLogin) ...[
+                      TextFormField(
+                        controller: _nameController,
+                        decoration: const InputDecoration(
+                          labelText: 'Имя',
+                          prefixIcon: Icon(Icons.person),
+                          border: OutlineInputBorder(),
+                        ),
+                        validator: (value) {
+                          if (!_isLogin) {
+                            if (value == null || value.isEmpty) {
+                              return 'Введите имя';
+                            }
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                    ],
 
                     // Поле email
                     TextFormField(
@@ -111,7 +178,7 @@ class _LoginFormState extends State<LoginForm> {
                     ),
                     const SizedBox(height: 24),
 
-                    // Кнопка входа
+                    // Кнопка входа/регистрации
                     state is AuthLoading
                         ? const CircularProgressIndicator()
                         : SizedBox(
@@ -120,46 +187,57 @@ class _LoginFormState extends State<LoginForm> {
                       child: ElevatedButton(
                         onPressed: () {
                           if (_formKey.currentState!.validate()) {
-                            context.read<AuthBloc>().add(
-                              LoginEvent(
-                                email: _emailController.text.trim(),
-                                password: _passwordController.text,
-                              ),
-                            );
+                            if (_isLogin) {
+                              // Вход
+                              context.read<AuthBloc>().add(
+                                LoginEvent(
+                                  email: _emailController.text.trim(),
+                                  password: _passwordController.text,
+                                ),
+                              );
+                            } else {
+                              // Регистрация
+                              context.read<AuthBloc>().add(
+                                RegisterEvent(
+                                  name: _nameController.text.trim(),
+                                  email: _emailController.text.trim(),
+                                  password: _passwordController.text,
+                                ),
+                              );
+                            }
                           }
                         },
-                        child: const Text(
-                          'Войти',
-                          style: TextStyle(fontSize: 16),
+                        child: Text(
+                          _isLogin ? 'Войти' : 'Зарегистрироваться',
+                          style: const TextStyle(fontSize: 16),
                         ),
                       ),
                     ),
 
                     const SizedBox(height: 20),
 
-                    // Тестовые данные
-                    Card(
-                      color: Colors.blue[50],
-                      child: Padding(
-                        padding: const EdgeInsets.all(12.0),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Тестовые доступы:',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                color: Colors.blue[700],
+                    // Тестовые данные (только для входа)
+                    if (_isLogin) ...[
+                      Card(
+                        color: Colors.blue[50],
+                        child: Padding(
+                          padding: const EdgeInsets.all(12.0),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Тестовые доступы:',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.blue[700],
+                                ),
                               ),
-                            ),
-                            const SizedBox(height: 8),
-                            _buildTestUser('Администратор', 'admin@autosalon.ru', '123456'),
-                            _buildTestUser('Менеджер', 'manager@autosalon.ru', '123456'),
-                            _buildTestUser('Наблюдатель', 'viewer@autosalon.ru', '123456'),
-                          ],
+                              const SizedBox(height: 8),
+                            ],
+                          ),
                         ),
                       ),
-                    ),
+                    ],
                   ],
                 ),
               ),
@@ -170,31 +248,7 @@ class _LoginFormState extends State<LoginForm> {
     );
   }
 
-  Widget _buildTestUser(String role, String email, String password) {
-    return GestureDetector(
-      onTap: () {
-        _emailController.text = email;
-        _passwordController.text = password;
-      },
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 4),
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(4),
-        ),
-        child: Row(
-          children: [
-            Text(
-              '$role: ',
-              style: const TextStyle(fontWeight: FontWeight.w500),
-            ),
-            Text(email),
-          ],
-        ),
-      ),
-    );
-  }
+
 
   void _showSuccessAndNavigate(BuildContext context, UserModel user) {
     ScaffoldMessenger.of(context).showSnackBar(

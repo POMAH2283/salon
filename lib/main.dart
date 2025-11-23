@@ -3,8 +3,12 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 
 import 'features/auth/presentation/bloc/auth_bloc.dart';
 import 'features/auth/presentation/screens/login_screen.dart';
+import 'di.dart';
+import 'routes.dart';
 
 void main() {
+  // Initialize dependency injection
+  setupDependencies();
   runApp(const MyApp());
 }
 

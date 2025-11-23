@@ -1,29 +1,31 @@
 import 'package:flutter/material.dart';
-import 'package:salon/features/cars/domain/entities/car_entity.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:salon/features/cars/data/models/car_model.dart';
 import 'package:salon/features/cars/presentation/bloc/car_management_bloc.dart';
 
 class DeleteConfirmationDialog extends StatelessWidget {
-  final Car car;
+  final CarModel car;
 
   const DeleteConfirmationDialog({required this.car});
 
   @override
   Widget build(BuildContext context) {
     return AlertDialog(
-      title: Text('Удалить автомобиль?'),
+      title: const Text('Удалить автомобиль?'),
       content: Text('Вы уверены, что хотите удалить ${car.brand} ${car.model}?'),
       actions: [
         TextButton(
           onPressed: () => Navigator.of(context).pop(),
-          child: Text('Отмена'),
+          child: const Text('Отмена'),
         ),
         ElevatedButton(
           onPressed: () {
-            context.read<CarManagementBloc>().add(DeleteCarEvent(car.id!));
             Navigator.of(context).pop();
+            // Use the context from the builder
+            context.read<CarManagementBloc>().add(DeleteCarEvent(car.id));
           },
           style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-          child: Text('Удалить'),
+          child: const Text('Удалить'),
         ),
       ],
     );

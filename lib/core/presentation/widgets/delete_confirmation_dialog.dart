@@ -4,7 +4,7 @@ import 'package:salon/features/cars/domain/entities/car_entity.dart';
 import 'package:salon/features/cars/presentation/bloc/car_management_bloc.dart';
 
 class DeleteConfirmationDialog extends StatelessWidget {
-  final Car car;
+  final CarEntity car;
 
   const DeleteConfirmationDialog({required this.car});
 
